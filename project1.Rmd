@@ -1,0 +1,121 @@
+---
+title: "Project1 - Course5: Reproducible Research"
+author: "Cathy Gao"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Loading and preprocessing the data
+ 
+```{r loaddata}
+unzip(zipfile="activity.zip")
+activity<-read.csv("activity.csv", header=TRUE)
+activity$date<-as.Date(as.character(activity$date), "%Y-%m-%d")
+activity$interval<-as.factor(activity$interval)
+str(activity$interval)
+```
+
+## What is mean total number of steps taken per day?
+```{r steps.day}
+sum.step<-with(activity, tapply(steps, date, sum))
+summary(sum.step)
+
+# histogram of total steps per day
+par(mar=c(5,4,2,2))
+hist(sum.step, main="Histogram of total number of steps per day", xlab="total steps per day", ylab="number of days")
+
+# report the mean and median
+mean(sum.step, na.rm=TRUE)
+median(sum.step, na.rm=TRUE)
+```
+
+## What is the average daily activity pattern? 
+```{r steps.interval}
+mean.step<-aggregate(steps ~ interval, data=activity, mean, na.rm=TRUE)
+
+# a time series plot of the 5-minute interval and the average number of steps across all days
+with(mean.step, plot(steps, type="l", xlab="5-minute interval during the day: total 288 intervals", ylab="average steps across 61 days of Oct. and Nov.", main="Time Series Plot of Average Steps Across All Days"))
+
+# time interval of maximal steps averaged across day
+mean.max<-mean.step[which.max(mean.step$steps), ]
+```
+
+At `r mean.max[1]`, the individual walked `r mean.max[2]` steps on average across all the days in the dataset. 
+
+## Inputing missing values
+There are a number of days/intervals where steps are missing values (coded as NA).    
+1. Calculate and report the total number of missing values in the dataset (number of rows with NAs). 
+```{r missing.value1}
+list_na<-colnames(activity)[apply(activity, 2, anyNA)]
+#sum(is.na(activity[,colnames(activity) %in% list_na]))
+missing.no<-dim(activity[rowSums(is.na(activity))>0, ])[1]
+missing.date<-unique(activity[is.na(activity$steps), "date"])
+```
+
+Missing values are from the variable(s) `r list_na`.   
+There are `r missing.no` missing observations.   
+They are from `r missing.date`.   
+
+2/3. Devise a strategy for filling in the missing values and create the new dataset with the missing values filled in.  
+* Strategy: use the mean of the interval
+```{r missing.value2&3}
+replace.missing.mean<-function(x){
+    x[is.na(x)]<-mean(x, na.rm=TRUE)
+    x
+}
+
+temp<-sapply(split(activity$steps, activity$interval), replace.missing.mean)
+steps.na.impute<-sapply(t(temp), cbind)
+
+#verify the NA missing values are replaced
+length(steps.na.impute)-sum(steps.na.impute == activity$steps, na.rm=TRUE)
+
+#dataset
+activity.na.impute<-cbind(steps.na.impute, activity[2:3])
+```
+
+4. Repeat the previous exercises - histogram of the sum of steps and report the mean/median total steps per day
+```{r missing.value4}
+sum.na.impute.step<-with(activity.na.impute, tapply(steps.na.impute, date, sum))
+summary(sum.na.impute.step)
+
+# histogram of total steps per day
+par(mar=c(5,4,2,2))
+hist(sum.na.impute.step, main="Histogram of total number of steps per day", xlab="total steps per day", ylab="number of days")
+
+# report the mean and median
+mean(sum.na.impute.step)
+median(sum.na.impute.step)
+```
+
+Dataset | Mean Steps | Median Steps
+--- | --- | ---
+Excluding NA | `r mean(sum.step, na.rm=TRUE)` | `r median(sum.step, na.rm=TRUE)`
+NA Imputed | `r mean(sum.na.impute.step)` | `r median(sum.na.impute.step)`
+
+Little is lost by excluding the missing values. 
+
+## Are there differences in activity patterns between weekdays and weekends? 
+1. Create a new factor variable indicating whether it is weekend in the dataset.   
+```{r weekend.pattern}
+weekend<-weekdays(activity.na.impute$date) %in% c("Saturday", "Sunday")
+weekend<-as.factor(weekend)
+levels(weekend)<-c("weekday", "weekend")
+activity.na.impute<-data.frame(activity.na.impute, weekend)
+```
+
+2. Make a panel plot of average steps across 61 days in an interval for both weekend and nonweekend. 
+``` {r plot}
+mean.step.na.impute<-aggregate(steps.na.impute ~ interval + weekend, data=activity.na.impute, mean)
+
+library(ggplot2)
+ggplot(mean.step.na.impute, aes(x=rep(seq(1:288), 2), y=steps.na.impute, color=weekend))+geom_line()+labs(title="Average Steps Across Days", x="Interval", y="Steps")+facet_wrap(weekend~.)
+```
+
+
+
+
